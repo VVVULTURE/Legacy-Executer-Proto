@@ -2,194 +2,73 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Legacy Executor</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Executor</title>
   <style>
-    /* Full‐screen starfield background */
-    body {
-      margin: 0;
-      padding: 0;
-      background: #000;
-      color: #FFF;
-      font-family: Arial, sans-serif;
-      overflow: hidden;
-      height: 100vh;
-    }
-    #backgroundCanvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      z-index: -1;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* Executor UI */
-    .container {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      max-width: 650px;
-      width: calc(100% - 40px);
-      background: rgba(0, 0, 0, 0.7);
-      padding: 20px;
-      border-radius: 8px;
-      box-sizing: border-box;
-      z-index: 1;
-    }
-    .container h1 {
-      margin: 0 0 20px;
-      text-align: center;
-    }
-    .container textarea {
-      width: 100%;
-      height: 200px;
-      background: #666;
-      color: #FFF;
-      border: 1px solid #888;
-      padding: 10px;
-      margin-bottom: 20px;
-      resize: vertical;
-      font-family: monospace;
-      font-size: 14px;
-      box-sizing: border-box;
-    }
-    .container input[type="file"] {
-      display: block;
-      margin-bottom: 20px;
-      color: #FFF;
-    }
-    .container button {
-      background: #8A2BE2;
-      border: none;
-      color: #FFF;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      margin-right: 10px;
-      border-radius: 4px;
-      transition: background .3s;
-    }
-    .container button:hover {
-      background: #7B1FA2;
-    }
-    .container hr {
-      border: 1px solid #555;
-      margin: 20px 0;
-    }
+    body{background:#2b0000;color:#f0d0d0;font-family:sans-serif;margin:1em}
+    h1{color:#ff5555;margin-bottom:0.5em}
+    .controls{background:#330000;border:1px solid #550000;padding:1em;border-radius:4px}
+    label{display:block;margin-top:0.75em;font-weight:bold}
+    input,textarea{background:#440000;color:#f0d0d0;border:1px solid #660000;
+                   border-radius:3px;padding:0.5em;font-family:monospace;
+                   width:100%;box-sizing:border-box}
+    textarea{height:20vh;resize:vertical}
+    button{background:#770000;color:#f0d0d0;border:1px solid #990000;
+           border-radius:3px;padding:0.5em 1em;margin-top:0.5em;
+           cursor:pointer;font-weight:bold}
+    button:disabled{background:#550000;border-color:#770000;cursor:not-allowed;opacity:0.6}
+    button:hover:not(:disabled){background:#990000;border-color:#bb0000}
   </style>
 </head>
 <body>
-
-  <canvas id="backgroundCanvas"></canvas>
-
-  <div class="container">
-    <h1>HTML Executor</h1>
-    <textarea id="codeInput" placeholder="Enter your HTML/JavaScript code here"></textarea>
-    <br>
-    <button onclick="executeCode()">Execute Code</button>
-    <hr>
-    <input type="file" id="fileUpload" accept=".html,.htm,.js,.txt">
-    <button onclick="executeFile()">Execute Uploaded File</button>
+  <h1>HTML Executor</h1>
+  <div class="controls">
+    <label>Upload .html or .txt file:
+      <input type="file" id="fileInput" accept=".html,.txt">
+    </label>
+    <button id="runFileBtn" disabled>Run Uploaded File</button>
+    <label>Paste your HTML code here:
+      <textarea id="codeInput" placeholder="<h1>Hello world</h1>"></textarea>
+    </label>
+    <button id="runCodeBtn">Run Code</button>
+    <label>Load HTML from URL:
+      <input type="text" id="urlInput" placeholder="https://example.com/page.html">
+    </label>
+    <button id="fetchUrlBtn">Fetch & Run</button>
   </div>
-
   <script>
-    // Starfield background logic
-    const canvas = document.getElementById('backgroundCanvas'),
-          ctx    = canvas.getContext('2d');
-    let stars = [], numStars = 150, mousePos = { x: -100, y: -100 };
-
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      initStars();
+    let uploadedContent = null;
+    function openInNewTab(html){ 
+      const blob = new Blob([html], { type:'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url,'_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
-    function Star(x, y, r, dx, dy) {
-      this.x = x; this.y = y;
-      this.radius = r;
-      this.dx = dx; this.dy = dy;
-    }
-    Star.prototype.draw = function() {
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI, false);
-      ctx.fillStyle = "#FFF";
-      ctx.fill();
-    };
-    Star.prototype.update = function() {
-      const dxm = this.x - mousePos.x,
-            dym = this.y - mousePos.y,
-            dist = Math.hypot(dxm, dym);
-      if (dist < 80) {
-        const angle = Math.atan2(dym, dxm),
-              force = (80 - dist) / 80;
-        this.dx += Math.cos(angle) * force;
-        this.dy += Math.sin(angle) * force;
-      }
-      this.dx *= 0.96;
-      this.dy *= 0.96;
-      this.x += this.dx;
-      this.y += this.dy;
-      if (this.x < 0) this.x += canvas.width;
-      else if (this.x > canvas.width) this.x -= canvas.width;
-      if (this.y < 0) this.y += canvas.height;
-      else if (this.y > canvas.height) this.y -= canvas.height;
-      this.draw();
-    };
-
-    function initStars() {
-      stars = [];
-      for (let i = 0; i < numStars; i++) {
-        const x  = Math.random() * canvas.width,
-              y  = Math.random() * canvas.height,
-              r  = Math.random() * 1.5 + 0.5,
-              dx = (Math.random() - 0.5) * 0.5,
-              dy = (Math.random() - 0.5) * 0.5;
-        stars.push(new Star(x, y, r, dx, dy));
-      }
-    }
-
-    function animate() {
-      requestAnimationFrame(animate);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      stars.forEach(star => star.update());
-    }
-
-    window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('mousemove', e => {
-      mousePos.x = e.clientX;
-      mousePos.y = e.clientY;
-    });
-
-    resizeCanvas();
-    animate();
-
-    // Executor functions
-    function executeCode() {
-      const code = document.getElementById('codeInput').value;
-      if (!code.trim()) {
-        return alert("Please enter some code to execute.");
-      }
-      const blob = new Blob([code], { type: 'text/html' });
-      const url  = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-    }
-
-    function executeFile() {
-      const input = document.getElementById('fileUpload');
-      if (input.files.length === 0) {
-        return alert("Please select a file to execute.");
-      }
-      const reader = new FileReader();
-      reader.onload = e => {
-        const blob = new Blob([e.target.result], { type: 'text/html' });
-        const url  = URL.createObjectURL(blob);
-        window.open(url, '_blank');
+    document.getElementById('fileInput').addEventListener('change', e => {
+      const f = e.target.files[0];
+      uploadedContent = null;
+      document.getElementById('runFileBtn').disabled = true;
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = ev => {
+        uploadedContent = ev.target.result;
+        document.getElementById('runFileBtn').disabled = false;
       };
-      reader.onerror = () => alert("Error reading file.");
-      reader.readAsText(input.files[0]);
-    }
+      r.readAsText(f);
+    });
+    document.getElementById('runFileBtn').onclick = () => uploadedContent && openInNewTab(uploadedContent);
+    document.getElementById('runCodeBtn').onclick = () => {
+      const c = document.getElementById('codeInput').value.trim();
+      if (!c) return alert('Paste some HTML code first!');
+      openInNewTab(c);
+    };
+    document.getElementById('fetchUrlBtn').onclick = () => {
+      const u = document.getElementById('urlInput').value.trim();
+      if (!u) return alert('Enter a URL first');
+      fetch(u)
+        .then(r => r.ok ? r.text() : Promise.reject(r.status))
+        .then(html => openInNewTab(html))
+        .catch(e => alert('Fetch error: ' + e));
+    };
   </script>
-
 </body>
 </html>
